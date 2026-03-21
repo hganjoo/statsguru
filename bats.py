@@ -25,9 +25,9 @@ def pos_group(p):
     if p <= 7:  return 'lower middle'
     return 'tail'  # 8-11
 
-# ── Data loading + baseline computation ──────────────────────────────────────
+# ── Load & enrich (shared with sguru.py) ─────────────────────────────────────
 @st.cache_data
-def load_and_enrich(path: str, block_size: int = 6) -> pd.DataFrame:
+def load_and_enrich(path: str, block_size: int = 6, k: float = 0.2) -> pd.DataFrame:
     df = pd.read_csv(path, low_memory=False)
 
     for col in ['year', 'runs', 'balls', 'strike_rate', 'batting_position', 'inns', 'is_out']:
@@ -38,41 +38,46 @@ def load_and_enrich(path: str, block_size: int = 6) -> pd.DataFrame:
     season_rank = {s: i for i, s in enumerate(seasons_ordered)}
     df['season_rank'] = df['season'].map(season_rank)
     df['era_block'] = (df['season_rank'] // block_size) * block_size
-
     df['pos_group'] = df['batting_position'].apply(pos_group)
 
     # ── Home / Away ──
-    NEUTRAL_MAP = {
-        'United Arab Emirates': 'Pakistan',
-    }
+    NEUTRAL_MAP = {'United Arab Emirates': 'Pakistan'}
     def get_home_away(row):
         home_country = NEUTRAL_MAP.get(row['country'], row['country'])
         return 'Home' if row['team_bat'] == home_country else 'Away'
-
     df['home_away'] = df.apply(get_home_away, axis=1)
 
     top7 = df[df['batting_position'] <= 7]
-    global_ref = top7['runs'].sum() / top7['is_out'].sum()
 
-    # Baseline 1: ERA
+    # ── Helper: compute z-score weights and adj_runs for any baseline ──
+    def z_adjust(df_full, base_col):
+        mu  = df_full[base_col].mean()
+        std = df_full[base_col].std()
+        df_full['_z'] = (df_full[base_col] - mu) / std
+        df_full['_w'] = np.exp(-k * df_full['_z'])
+        adj = df_full['runs'] * df_full['_w']
+        df_full.drop(columns=['_z', '_w'], inplace=True)
+        return adj
+
+    # ── Baseline 1: ERA ──
     era = (
         top7.groupby('era_block')
         .apply(lambda g: g['runs'].sum() / g['is_out'].sum())
         .reset_index(name='base_era')
     )
     df = df.merge(era, on='era_block', how='left')
-    df['adj_runs_era'] = df['runs'] * (global_ref / df['base_era'])
+    df['adj_runs_era'] = z_adjust(df, 'base_era')
 
-    # Baseline 2: ERA-COUNTRY
+    # ── Baseline 2: ERA-COUNTRY ──
     era_ctry = (
         top7.groupby(['era_block', 'country'])
         .apply(lambda g: g['runs'].sum() / g['is_out'].sum())
         .reset_index(name='base_era_country')
     )
     df = df.merge(era_ctry, on=['era_block', 'country'], how='left')
-    df['adj_runs_era_country'] = df['runs'] * (global_ref / df['base_era_country'])
+    df['adj_runs_era_country'] = z_adjust(df, 'base_era_country')
 
-    # Baseline 3: ERA-POSITION
+    # ── Baseline 3: ERA-POSITION ──
     era_pos = (
         top7.groupby(['era_block', 'pos_group'])
         .apply(lambda g: g['runs'].sum() / g['is_out'].sum())
@@ -80,22 +85,25 @@ def load_and_enrich(path: str, block_size: int = 6) -> pd.DataFrame:
     )
     df = df.merge(era_pos, on=['era_block', 'pos_group'], how='left')
 
-    pos_global_ref = (
-        top7.groupby('pos_group')
-        .apply(lambda g: g['runs'].sum() / g['is_out'].sum())
-        .reset_index(name='pos_global_ref')
+    # Z-score within each pos_group separately
+    pos_stats = (
+        df.groupby('pos_group')['base_era_pos']
+        .agg(mu='mean', std='std')
+        .reset_index()
     )
-    df = df.merge(pos_global_ref, on='pos_group', how='left')
-    df['adj_runs_era_pos'] = df['runs'] * (df['pos_global_ref'] / df['base_era_pos'])
+    df = df.merge(pos_stats, on='pos_group', how='left')
+    df['_z_pos'] = (df['base_era_pos'] - df['mu']) / df['std']
+    df['adj_runs_era_pos'] = df['runs'] * np.exp(-k * df['_z_pos'])
+    df.drop(columns=['_z_pos', 'mu', 'std'], inplace=True)
 
-    # Baseline 4: ERA-OPPOSITION
+    # ── Baseline 4: ERA-OPPOSITION ──
     era_opp = (
         top7.groupby(['era_block', 'team_bowl'])
         .apply(lambda g: g['runs'].sum() / g['is_out'].sum())
         .reset_index(name='base_era_opp')
     )
     df = df.merge(era_opp, on=['era_block', 'team_bowl'], how='left')
-    df['adj_runs_era_opp'] = df['runs'] * (global_ref / df['base_era_opp'])
+    df['adj_runs_era_opp'] = z_adjust(df, 'base_era_opp')
 
     return df
 
