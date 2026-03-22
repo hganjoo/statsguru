@@ -38,6 +38,7 @@ def load_and_enrich(path: str, block_size: int = 6, k: float = 0.2) -> pd.DataFr
     df['season_rank'] = df['season'].map(season_rank)
     df['era_block'] = (df['season_rank'] // block_size) * block_size
     df['pos_group'] = df['batting_position'].apply(pos_group)
+    
 
     # ── Home / Away ──
     NEUTRAL_MAP = {'United Arab Emirates': 'Pakistan'}
