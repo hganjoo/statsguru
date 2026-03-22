@@ -54,6 +54,14 @@ def load_bowling(path: str, block_size: int = 6) -> pd.DataFrame:
 
     return df
 
+@st.cache_data
+def load_batting_matched(path: str) -> pd.DataFrame:
+    df = pd.read_csv(path, low_memory=False)
+    for col in ['runs', 'is_out', 'batting_position', 'inns']:
+        if col in df.columns:
+            df[col] = pd.to_numeric(df[col], errors='coerce')
+    return df
+
 # ── Helpers ───────────────────────────────────────────────────────────────────
 def safe(n, d, decimals=2):
     return round(n / d, decimals) if d > 0 and not np.isnan(d) else float('nan')
@@ -70,7 +78,8 @@ def safe_wpi_diff(basewpi, wpi):
 
 # ── Sidebar ───────────────────────────────────────────────────────────────────
 with st.sidebar:
-    df_raw = load_bowling('test_bowling_innings.csv')
+    df_raw     = load_bowling('test_bowling_innings.csv')
+    df_batting = load_batting_matched('batting_matched.csv')
 
     st.markdown("---")
     st.markdown("### 🔍 Filters")
@@ -142,20 +151,43 @@ def apply_filters(df: pd.DataFrame) -> pd.DataFrame:
         mask &= df['player_role_type'].isin(['C', 'CWK'])
     return df[mask].copy()
 
+# ── Victim lookup ─────────────────────────────────────────────────────────────
+@st.cache_data
+def prepare_victims(batting: pd.DataFrame) -> pd.DataFrame:
+    """Pre-filter batting to only dismissed rows with a named bowler."""
+    return batting[
+        batting['dismissal_bowler_filled'].notna() &
+        batting['is_out'].fillna(0).astype(int).eq(1)
+    ][['p_match', 'inns', 'dismissal_bowler_filled',
+       'batting_position', 'dismissal_type_short']].copy()
+
+def get_victims_for_bowler(dismissed: pd.DataFrame, bowl_name: str,
+                            match_inns_set: set) -> pd.DataFrame:
+    """
+    Get dismissed batters for a specific bowler name,
+    restricted to (p_match, inns) combinations in match_inns_set.
+    """
+    bv = dismissed[dismissed['dismissal_bowler_filled'] == bowl_name].copy()
+    if bv.empty:
+        return bv
+    bv['_key'] = list(zip(bv['p_match'], bv['inns']))
+    return bv[bv['_key'].isin(match_inns_set)].drop(columns=['_key'])
+
 # ── Build comparison table ────────────────────────────────────────────────────
-def build_comparison(df: pd.DataFrame, min_inns: int, min_wkts: int) -> pd.DataFrame:
+def build_comparison(df: pd.DataFrame, dismissed: pd.DataFrame,
+                     min_inns: int, min_wkts: int) -> pd.DataFrame:
     rows = []
     for bowler_id, g in df.groupby('p_bowl'):
         inns    = len(g)
         runs    = int(g['runs_conceded'].fillna(0).sum())
         balls   = int(g['balls'].fillna(0).sum())
         wickets = int(g['wickets'].fillna(0).sum())
-        maidens = int(g['maidens'].fillna(0).sum())
 
         if inns < min_inns or wickets < min_wkts:
             continue
 
-        name = g['bowl'].iloc[0]
+        name    = g['bowl'].iloc[0]
+        maidens = int(g['maidens'].fillna(0).sum())
 
         ave  = safe(runs,    wickets)
         sr   = safe(balls,   wickets)
@@ -169,6 +201,20 @@ def build_comparison(df: pd.DataFrame, min_inns: int, min_wkts: int) -> pd.DataF
         baseav  = g['baseav'].mean()  if 'baseav'  in g.columns else float('nan')
         basesr  = g['basesr'].mean()  if 'basesr'  in g.columns else float('nan')
         basewpi = g['basewpi'].mean() if 'basewpi' in g.columns else float('nan')
+
+        # Victim stats — restrict to (p_match, inns) in this bowler's filtered spells
+        match_inns_set = set(zip(g['p_match'], g['inns']))
+        bv = get_victims_for_bowler(dismissed, name, match_inns_set)
+        n_victims = len(bv)
+
+        top7_pct = round(
+            (bv['batting_position'] <= 7).sum() / n_victims * 100, 1
+        ) if n_victims > 0 else float('nan')
+
+        clean_types = ['bowled', 'lbw', 'caught keeper']
+        clean_pct = round(
+            bv['dismissal_type_short'].isin(clean_types).sum() / n_victims * 100, 1
+        ) if n_victims > 0 else float('nan')
 
         rows.append({
             'Bowler':   name,
@@ -185,6 +231,8 @@ def build_comparison(df: pd.DataFrame, min_inns: int, min_wkts: int) -> pd.DataF
             'WPI diff': safe_wpi_diff(wpi, basewpi),
             '5WI':      fwi,
             '10WM':     twm,
+            'Top-7 %':  top7_pct,
+            'Clean %':  clean_pct,
         })
 
     if not rows:
@@ -197,17 +245,18 @@ def build_comparison(df: pd.DataFrame, min_inns: int, min_wkts: int) -> pd.DataF
 # ── Main ──────────────────────────────────────────────────────────────────────
 if run_query:
     df_filtered = apply_filters(df_raw)
-    n_innings = len(df_filtered)
-    n_bowlers = df_filtered['p_bowl'].nunique()
+    n_innings   = len(df_filtered)
+    n_bowlers   = df_filtered['p_bowl'].nunique()
 
     col_a, col_b = st.columns(2)
     col_a.metric("Innings matched", f"{n_innings:,}")
-    col_b.metric("Bowlers", f"{n_bowlers:,}")
+    col_b.metric("Bowlers",         f"{n_bowlers:,}")
 
     if n_innings == 0:
         st.info("No innings match your filters — try relaxing the criteria.")
     else:
-        tbl = build_comparison(df_filtered, int(min_inns), int(min_wkts))
+        dismissed = prepare_victims(df_batting)
+        tbl = build_comparison(df_filtered, dismissed, int(min_inns), int(min_wkts))
 
         if tbl.empty:
             st.info(f"No bowler meets the minimum thresholds ({int(min_inns)} innings, {int(min_wkts)} wickets).")
