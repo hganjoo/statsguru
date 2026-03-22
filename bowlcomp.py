@@ -1,0 +1,222 @@
+import streamlit as st
+import pandas as pd
+import numpy as np
+
+# ── Page config ───────────────────────────────────────────────────────────────
+st.set_page_config(
+    page_title="StatsBench · Bowler Comparison",
+    page_icon="🏏",
+    layout="wide",
+    initial_sidebar_state="expanded",
+)
+
+st.title("StatsBench · Bowler Comparison")
+st.caption("One row per bowler — aggregated across all matching innings")
+st.divider()
+
+# ── Data loading ──────────────────────────────────────────────────────────────
+@st.cache_data
+def load_bowling(path: str, block_size: int = 6) -> pd.DataFrame:
+    df = pd.read_csv(path, low_memory=False)
+    for col in ['year', 'balls', 'runs_conceded', 'wickets', 'maidens',
+                'economy', 'runs_per_ball', 'dots', 'overs', 'inns']:
+        if col in df.columns:
+            df[col] = pd.to_numeric(df[col], errors='coerce')
+
+    df['ave']  = np.where(df['wickets'] > 0, df['runs_conceded'] / df['wickets'], np.nan)
+    df['sr']   = np.where(df['wickets'] > 0, df['balls'] / df['wickets'], np.nan)
+    df['econ'] = df['runs_per_ball'] * 6
+
+    NEUTRAL_MAP = {'United Arab Emirates': 'Pakistan'}
+    def get_home_away(row):
+        home_country = NEUTRAL_MAP.get(row['country'], row['country'])
+        return 'Home' if row['team_bowl'] == home_country else 'Away'
+    df['home_away'] = df.apply(get_home_away, axis=1)
+
+    def getbtype(s):
+        if pd.isna(s): return None
+        return 'pace' if 'f' in str(s) else 'spin'
+    df['bkind'] = df['bowling_kind'].apply(getbtype)
+
+    seasons_ordered = sorted(df['season'].dropna().unique())
+    season_rank = {s: i for i, s in enumerate(seasons_ordered)}
+    df['season_rank'] = df['season'].map(season_rank)
+    df['era_block'] = (df['season_rank'] // block_size) * block_size
+
+    baseg   = df.groupby(['era_block', 'bkind', 'country'])
+    baseav  = (baseg['runs_conceded'].sum() / baseg['wickets'].sum()).reset_index(name='baseav')
+    basesr  = (baseg['balls'].sum()         / baseg['wickets'].sum()).reset_index(name='basesr')
+    basewpi = (baseg['wickets'].sum()        / baseg['wickets'].count()).reset_index(name='basewpi')
+
+    base = baseav.merge(basesr,  on=['era_block', 'bkind', 'country'])
+    base = base.merge(basewpi, on=['era_block', 'bkind', 'country'])
+    df   = df.merge(base, on=['era_block', 'bkind', 'country'], how='left')
+
+    return df
+
+# ── Helpers ───────────────────────────────────────────────────────────────────
+def safe(n, d, decimals=2):
+    return round(n / d, decimals) if d > 0 and not np.isnan(d) else float('nan')
+
+def safe_diff(val, base):
+    if any(pd.isna(x) or x == 0 for x in [val, base]):
+        return float('nan')
+    return round((val / base) ** -1, 3)
+
+def safe_wpi_diff(basewpi, wpi):
+    if any(pd.isna(x) or x == 0 for x in [basewpi, wpi]):
+        return float('nan')
+    return round(basewpi / wpi, 3)
+
+# ── Sidebar ───────────────────────────────────────────────────────────────────
+with st.sidebar:
+    df_raw = load_bowling('test_bowling_innings.csv')
+
+    st.markdown("---")
+    st.markdown("### 🔍 Filters")
+    st.caption("Filters apply to all innings used to compute each bowler's stats.")
+
+    opps_all = sorted(df_raw['team_bat'].dropna().unique().tolist())
+    sel_opps = st.multiselect("Opposition", options=opps_all)
+
+    col1, col2 = st.columns(2)
+    with col1:
+        countries_all = sorted(df_raw['country'].dropna().unique().tolist())
+        sel_countries = st.multiselect("Country", options=countries_all)
+    with col2:
+        grounds_all = sorted(df_raw['ground'].dropna().unique().tolist())
+        sel_grounds = st.multiselect("Ground", options=grounds_all)
+
+    yr_min = int(df_raw['year'].min())
+    yr_max = int(df_raw['year'].max())
+    sel_years = st.slider("Year range", yr_min, yr_max, (yr_min, yr_max))
+
+    inns_options = ["1st", "2nd", "3rd", "4th"]
+    sel_inns = st.multiselect("Innings", options=inns_options)
+
+    sel_home_away = st.multiselect("Home / Away", options=["Home", "Away"])
+
+    result_options = ["Won", "Lost", "Draw / No result"] if 'winner' in df_raw.columns else []
+    sel_result = st.multiselect("Match result", options=result_options)
+
+    col3, col4 = st.columns(2)
+    with col3:
+        filter_captain = st.checkbox("As captain")
+    with col4:
+        sel_bkind = st.multiselect("Kind", options=["pace", "spin"])
+
+    min_inns = st.number_input("Minimum innings (to appear)", min_value=1, value=20, step=1)
+    min_wkts = st.number_input("Minimum wickets (to appear)", min_value=0, value=50, step=1)
+
+    st.markdown("---")
+    run_query = st.button("⚡ Run Comparison")
+
+# ── Filter logic ──────────────────────────────────────────────────────────────
+def apply_filters(df: pd.DataFrame) -> pd.DataFrame:
+    mask = pd.Series([True] * len(df), index=df.index)
+    if sel_opps:
+        mask &= df['team_bat'].isin(sel_opps)
+    if sel_countries:
+        mask &= df['country'].isin(sel_countries)
+    if sel_grounds:
+        mask &= df['ground'].isin(sel_grounds)
+    if 'year' in df.columns:
+        mask &= df['year'].between(sel_years[0], sel_years[1])
+    if sel_inns and 'inns' in df.columns:
+        inns_map = {"1st": 1, "2nd": 2, "3rd": 3, "4th": 4}
+        mask &= df['inns'].isin([inns_map[i] for i in sel_inns])
+    if sel_home_away and 'home_away' in df.columns:
+        mask &= df['home_away'].isin(sel_home_away)
+    if sel_bkind and 'bkind' in df.columns:
+        mask &= df['bkind'].isin(sel_bkind)
+    if sel_result and 'winner' in df.columns and 'team_bowl' in df.columns:
+        result_mask = pd.Series([False] * len(df), index=df.index)
+        if "Won" in sel_result:
+            result_mask |= (df['winner'] == df['team_bowl'])
+        if "Lost" in sel_result:
+            result_mask |= (df['winner'] != df['team_bowl']) & df['winner'].notna() & (df['winner'] != '')
+        if "Draw / No result" in sel_result:
+            result_mask |= df['winner'].isna() | (df['winner'] == '')
+        mask &= result_mask
+    if filter_captain and 'player_role_type' in df.columns:
+        mask &= df['player_role_type'].isin(['C', 'CWK'])
+    return df[mask].copy()
+
+# ── Build comparison table ────────────────────────────────────────────────────
+def build_comparison(df: pd.DataFrame, min_inns: int, min_wkts: int) -> pd.DataFrame:
+    rows = []
+    for bowler_id, g in df.groupby('p_bowl'):
+        inns    = len(g)
+        runs    = int(g['runs_conceded'].fillna(0).sum())
+        balls   = int(g['balls'].fillna(0).sum())
+        wickets = int(g['wickets'].fillna(0).sum())
+        maidens = int(g['maidens'].fillna(0).sum())
+
+        if inns < min_inns or wickets < min_wkts:
+            continue
+
+        name = g['bowl'].iloc[0]
+
+        ave  = safe(runs,    wickets)
+        sr   = safe(balls,   wickets)
+        econ = round(runs / balls * 6, 2) if balls > 0 else float('nan')
+        wpi  = safe(wickets, inns)
+
+        fwi = int((g['wickets'].fillna(0) >= 5).sum())
+        twm = int((g.groupby('p_match')['wickets'].sum() >= 10).sum()) \
+              if 'p_match' in g.columns else 0
+
+        baseav  = g['baseav'].mean()  if 'baseav'  in g.columns else float('nan')
+        basesr  = g['basesr'].mean()  if 'basesr'  in g.columns else float('nan')
+        basewpi = g['basewpi'].mean() if 'basewpi' in g.columns else float('nan')
+
+        rows.append({
+            'Bowler':   name,
+            'Inns':     inns,
+            'Balls':    balls,
+            'Runs':     runs,
+            'Wkts':     wickets,
+            'Ave':      ave,
+            'SR':       sr,
+            'Econ':     econ,
+            'Wkts/Inn': wpi,
+            'Ave diff': safe_diff(ave, baseav),
+            'SR diff':  safe_diff(sr,  basesr),
+            'WPI diff': safe_wpi_diff(wpi, basewpi),
+            '5WI':      fwi,
+            '10WM':     twm,
+        })
+
+    if not rows:
+        return pd.DataFrame()
+
+    return (pd.DataFrame(rows)
+            .sort_values('Wkts', ascending=False)
+            .reset_index(drop=True))
+
+# ── Main ──────────────────────────────────────────────────────────────────────
+if run_query:
+    df_filtered = apply_filters(df_raw)
+    n_innings = len(df_filtered)
+    n_bowlers = df_filtered['p_bowl'].nunique()
+
+    col_a, col_b = st.columns(2)
+    col_a.metric("Innings matched", f"{n_innings:,}")
+    col_b.metric("Bowlers", f"{n_bowlers:,}")
+
+    if n_innings == 0:
+        st.info("No innings match your filters — try relaxing the criteria.")
+    else:
+        tbl = build_comparison(df_filtered, int(min_inns), int(min_wkts))
+
+        if tbl.empty:
+            st.info(f"No bowler meets the minimum thresholds ({int(min_inns)} innings, {int(min_wkts)} wickets).")
+        else:
+            st.markdown(f"**{len(tbl)} bowlers** · ≥ {int(min_inns)} innings · ≥ {int(min_wkts)} wickets · sorted by wickets")
+            st.dataframe(tbl, use_container_width=True, hide_index=True)
+
+            csv_out = tbl.to_csv(index=False).encode('utf-8')
+            st.download_button("⬇ Download comparison CSV", data=csv_out,
+                               file_name="statsbench_bowlcomp.csv", mime="text/csv")
+else:
+    st.info("Set your filters in the sidebar, then hit **Run Comparison**.")
