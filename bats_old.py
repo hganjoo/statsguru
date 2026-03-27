@@ -105,22 +105,6 @@ def load_and_enrich(path: str, block_size: int = 6, k: float = 0.2) -> pd.DataFr
     df = df.merge(era_opp, on=['era_block', 'team_bowl'], how='left')
     df['adj_runs_era_opp'] = z_adjust(df, 'base_era_opp')
 
-    # ── % of team runs ──
-    if 'team_innings_runs' in df.columns:
-        df['team_runs_pct'] = df['runs'] / df['team_innings_runs'] * 100
-
-    # ── Match factor ──
-    # ── Match factor ──
-    top8 = df[df['batting_position'] <= 8][['p_match', 'runs', 'is_out']].copy()
-    match_agg = (
-        top8.groupby('p_match')
-        .agg(top8_runs=('runs', 'sum'), top8_outs=('is_out', 'sum'))
-        .reset_index()
-    )
-    match_agg['match_ave'] = match_agg['top8_runs'] / match_agg['top8_outs'].replace(0, np.nan)
-    df = df.merge(match_agg[['p_match', 'match_ave']], on='p_match', how='left')
-    df['match_factor'] = df['runs'] / df['match_ave']
-    df.drop(columns=['match_ave'], inplace=True)
     return df
 
 # ── Sidebar ───────────────────────────────────────────────────────────────────
@@ -254,24 +238,19 @@ def agg_stats(df: pd.DataFrame, group_col: str, group_label: str, sort_by_label:
             g['adj_runs_era_opp'].sum()     if 'adj_runs_era_opp'     in g.columns else float('nan'),
             outs,
         )
-        team_pct    = round(g['team_runs_pct'].mean(), 1)  if 'team_runs_pct' in g.columns else float('nan')
-        match_fac   = round(g['match_factor'].mean(),  2)  if 'match_factor'  in g.columns else float('nan')
-
         rows.append({
-            group_label:    grp_val,
-            'Inns':         inns,
-            'NO':           inns - outs,
-            'Runs':         int(runs.sum()),
-            'HS':           int(runs.max()) if len(runs) else 0,
-            'Avg':          ave,
-            'Era-ave':      ave_era,
-            'Ctry-ave':     ave_ctry,
-            'Pos-ave':      ave_pos,
-            'Opp-ave':      ave_opp,
-            'Team%':        team_pct,
-            'Match factor': match_fac,
-            '100s':         int((runs >= 100).sum()),
-            '50s':          int(((runs >= 50) & (runs < 100)).sum()),
+            group_label: grp_val,
+            'Inns':      inns,
+            'NO':        inns - outs,
+            'Runs':      int(runs.sum()),
+            'HS':        int(runs.max()) if len(runs) else 0,
+            'Avg':       ave,
+            'Era-ave':   ave_era,
+            'Ctry-ave':  ave_ctry,
+            'Pos-ave':   ave_pos,
+            'Opp-ave':   ave_opp,
+            '100s':      int((runs >= 100).sum()),
+            '50s':       int(((runs >= 50) & (runs < 100)).sum()),
         })
 
     result = pd.DataFrame(rows)
@@ -298,19 +277,17 @@ def show_summary_strip(df):
     )
 
     stats = {
-        "Innings":      len(df),
-        "NO":           len(df) - outs,
-        "Runs":         int(runs.sum()),
-        "Avg":          ave,
-        "Era-ave":      ave_era,
-        "Ctry-ave":     ave_ctry,
-        "Pos-ave":      ave_pos,
-        "Opp-ave":      ave_opp,
-        "Team%":        round(df['team_runs_pct'].mean(), 1) if 'team_runs_pct' in df.columns else float('nan'),
-        "Match factor": round(df['match_factor'].mean(),  2) if 'match_factor'  in df.columns else float('nan'),
-        "HS":           int(runs.max()) if len(runs) else 0,
-        "100s":         int((runs >= 100).sum()),
-        "50s":          int(((runs >= 50) & (runs < 100)).sum()),
+        "Innings":  len(df),
+        "NO":       len(df) - outs,
+        "Runs":     int(runs.sum()),
+        "Avg":      ave,
+        "Era-ave":  ave_era,
+        "Ctry-ave": ave_ctry,
+        "Pos-ave":  ave_pos,
+        "Opp-ave":  ave_opp,
+        "HS":       int(runs.max()) if len(runs) else 0,
+        "100s":     int((runs >= 100).sum()),
+        "50s":      int(((runs >= 50) & (runs < 100)).sum()),
     }
     cols = st.columns(len(stats))
     for col, (label, val) in zip(cols, stats.items()):
@@ -338,7 +315,6 @@ if run_query:
                 'fours', 'sixes', 'strike_rate', 'is_out', 'dismissal_type_short',
                 'dismissal_bowler', 'winner', 'season',
                 'adj_runs_era', 'adj_runs_era_country', 'adj_runs_era_pos', 'adj_runs_era_opp',
-                'team_runs_pct', 'match_factor',
             ]
             col_rename = {
                 'bat': 'Batter', 'team_bat': 'Team', 'team_bowl': 'Opposition','home_away': 'H/A',
@@ -349,7 +325,6 @@ if run_query:
                 'dismissal_bowler': 'Bowler', 'winner': 'Winner', 'season': 'Season',
                 'adj_runs_era': 'Adj(era)', 'adj_runs_era_country': 'Adj(ctry)',
                 'adj_runs_era_pos': 'Adj(pos)', 'adj_runs_era_opp': 'Adj(opp)',
-                'team_runs_pct': 'Team%', 'match_factor': 'Match factor',
             }
             display_cols = [c for c in DISPLAY_COLS if c in df_filtered.columns]
             df_show = df_filtered[display_cols].rename(columns=col_rename)

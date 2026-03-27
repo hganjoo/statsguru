@@ -105,23 +105,6 @@ def load_and_enrich(path: str, block_size: int = 6, k: float = 0.2) -> pd.DataFr
     df = df.merge(era_opp, on=['era_block', 'team_bowl'], how='left')
     df['adj_runs_era_opp'] = z_adjust(df, 'base_era_opp')
 
-    # ── % of team runs ──
-    if 'team_innings_runs' in df.columns:
-        df['team_runs_pct'] = df['runs'] / df['team_innings_runs'] * 100
-
-    # ── Match factor ──
-    # ── Match factor ──
-    top8 = df[df['batting_position'] <= 8][['p_match', 'runs', 'is_out']].copy()
-    match_agg = (
-        top8.groupby('p_match')
-        .agg(top8_runs=('runs', 'sum'), top8_outs=('is_out', 'sum'))
-        .reset_index()
-    )
-    match_agg['match_ave'] = match_agg['top8_runs'] / match_agg['top8_outs'].replace(0, np.nan)
-    df = df.merge(match_agg[['p_match', 'match_ave']], on='p_match', how='left')
-    df['match_factor'] = df['runs'] / df['match_ave']
-    df.drop(columns=['match_ave'], inplace=True)
-
     return df
 # ── Sidebar ───────────────────────────────────────────────────────────────────
 with st.sidebar:
@@ -250,21 +233,19 @@ def build_comparison(df: pd.DataFrame, min_inns: int) -> pd.DataFrame:
         total_balls = int(g['balls'].fillna(0).sum())
 
         rows.append({
-            'Batter':        batter,
-            'Inns':          inns,
-            'NO':            inns - outs,
-            'Runs':          total_runs,
-            'HS':            int(runs.max()),
-            'Avg':           safe_ave(total_runs, outs),
-            'Era-ave':       safe_ave(g['adj_runs_era'].sum(),         outs),
-            'Ctry-ave':      safe_ave(g['adj_runs_era_country'].sum(), outs),
-            'Pos-ave':       safe_ave(g['adj_runs_era_pos'].sum(),     outs),
-            'Opp-ave':       safe_ave(g['adj_runs_era_opp'].sum(),     outs),
-            'SR':            sr,
-            'Team%':         round(g['team_runs_pct'].mean(), 1) if 'team_runs_pct' in g.columns else float('nan'),
-            'Match factor':  round(g['match_factor'].mean(),  2) if 'match_factor'  in g.columns else float('nan'),
-            '100s':          int((runs >= 100).sum()),
-            '50s':           int(((runs >= 50) & (runs < 100)).sum()),
+            'Batter':   batter,
+            'Inns':     inns,
+            'NO':       inns - outs,
+            'Runs':     total_runs,
+            'HS':       int(runs.max()),
+            'Avg':      safe_ave(total_runs, outs),
+            'Era-ave':  safe_ave(g['adj_runs_era'].sum(),         outs),
+            'Ctry-ave': safe_ave(g['adj_runs_era_country'].sum(), outs),
+            'Pos-ave':  safe_ave(g['adj_runs_era_pos'].sum(),     outs),
+            'Opp-ave':  safe_ave(g['adj_runs_era_opp'].sum(),     outs),
+            'SR':       sr,
+            '100s':     int((runs >= 100).sum()),
+            '50s':      int(((runs >= 50) & (runs < 100)).sum()),
         })
 
     if not rows:
