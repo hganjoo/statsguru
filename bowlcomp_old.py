@@ -52,14 +52,6 @@ def load_bowling(path: str, block_size: int = 6) -> pd.DataFrame:
     base = base.merge(basewpi, on=['era_block', 'bkind', 'country'])
     df   = df.merge(base, on=['era_block', 'bkind', 'country'], how='left')
 
-    matchstats = df.groupby(['p_match', 'bkind']).agg(
-        {'balls': 'sum', 'wickets': 'sum', 'runs_conceded': 'sum'}
-    ).reset_index()
-    matchstats['matchav_inv'] = matchstats['wickets'] / matchstats['runs_conceded']
-    matchstats['matchsr_inv'] = matchstats['wickets'] / matchstats['balls']
-    df = df.merge(matchstats[['p_match', 'bkind', 'matchav_inv', 'matchsr_inv']],
-                  on=['p_match', 'bkind'])
-
     return df
 
 @st.cache_data
@@ -210,27 +202,6 @@ def build_comparison(df: pd.DataFrame, dismissed: pd.DataFrame,
         basesr  = g['basesr'].mean()  if 'basesr'  in g.columns else float('nan')
         basewpi = g['basewpi'].mean() if 'basewpi' in g.columns else float('nan')
 
-        # Match factor ave and SR (no inversion — higher = better)
-        g_runs  = g['runs_conceded'].fillna(0).values
-        g_balls = g['balls'].fillna(0).values
-        g_wkts  = g['wickets'].fillna(0).values
-
-        if 'matchav_inv' in g.columns:
-            wkts_per_run   = np.where(g_runs  > 0, g_wkts / g_runs,  np.nan)
-            mf_ave_ratios  = wkts_per_run / g['matchav_inv'].values
-            mf_ave_mean    = np.nanmean(mf_ave_ratios)
-            mf_ave = round(mf_ave_mean, 2) if not np.isnan(mf_ave_mean) else float('nan')
-        else:
-            mf_ave = float('nan')
-
-        if 'matchsr_inv' in g.columns:
-            wkts_per_ball  = np.where(g_balls > 0, g_wkts / g_balls, np.nan)
-            mf_sr_ratios   = wkts_per_ball / g['matchsr_inv'].values
-            mf_sr_mean     = np.nanmean(mf_sr_ratios)
-            mf_sr = round(mf_sr_mean, 2) if not np.isnan(mf_sr_mean) else float('nan')
-        else:
-            mf_sr = float('nan')
-
         # Victim stats — restrict to (p_match, inns) in this bowler's filtered spells
         match_inns_set = set(zip(g['p_match'], g['inns']))
         bv = get_victims_for_bowler(dismissed, name, match_inns_set)
@@ -258,8 +229,6 @@ def build_comparison(df: pd.DataFrame, dismissed: pd.DataFrame,
             'Ave diff': safe_diff(ave, baseav),
             'SR diff':  safe_diff(sr,  basesr),
             'WPI diff': safe_wpi_diff(wpi, basewpi),
-            'MF Ave':   mf_ave,
-            'MF SR':    mf_sr,
             '5WI':      fwi,
             '10WM':     twm,
             'Top-7 %':  top7_pct,

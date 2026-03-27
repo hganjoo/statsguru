@@ -56,11 +56,6 @@ def load_bowling(path: str, block_size: int = 6) -> pd.DataFrame:
     base = base.merge(basewpi, on=['era_block', 'bkind', 'country'])
     df   = df.merge(base, on=['era_block', 'bkind', 'country'], how='left')
 
-    matchstats = df.groupby(['p_match','bkind']).agg({'balls':'sum','wickets':'sum','runs_conceded':'sum'}).reset_index()
-    matchstats['matchav_inv'] = matchstats.wickets / matchstats.runs_conceded
-    matchstats['matchsr_inv'] = matchstats.wickets / matchstats.balls
-    df = df.merge(matchstats[['p_match','bkind','matchav_inv','matchsr_inv']], on = ['p_match','bkind'] )
-
     return df
 
 @st.cache_data
@@ -206,24 +201,6 @@ def agg_bowling(g: pd.DataFrame):
     basesr  = g['basesr'].mean()  if 'basesr'  in g.columns else float('nan')
     basewpi = g['basewpi'].mean() if 'basewpi' in g.columns else float('nan')
 
-    # Match factor ave and SR
-    # Per innings: (wickets/runs_conceded) / matchav_inv, mean across innings, then invert
-    if 'matchav_inv' in g.columns:
-        wkts_per_run = np.where(runs > 0, wickets / runs, np.nan)
-        mf_ave_ratios = wkts_per_run / g['matchav_inv'].values
-        mf_ave_mean = np.nanmean(mf_ave_ratios)
-        mf_ave = round(mf_ave_mean, 2) if mf_ave_mean > 0 and not np.isnan(mf_ave_mean) else float('nan')
-    else:
-        mf_ave = float('nan')
-
-    if 'matchsr_inv' in g.columns:
-        wkts_per_ball = np.where(balls > 0, wickets / balls, np.nan)
-        mf_sr_ratios = wkts_per_ball / g['matchsr_inv'].values
-        mf_sr_mean = np.nanmean(mf_sr_ratios)
-        mf_sr = round(mf_sr_mean, 2) if mf_sr_mean > 0 and not np.isnan(mf_sr_mean) else float('nan')
-    else:
-        mf_sr = float('nan')
-
     return {
         'inns':     inns,
         'balls':    total_balls,
@@ -237,8 +214,6 @@ def agg_bowling(g: pd.DataFrame):
         'ave_diff': safe_diff(ave,  baseav),
         'sr_diff':  safe_diff(sr,   basesr),
         'wpi_diff': safe_diff(basewpi,  wpi),
-        'mf_ave':   mf_ave,
-        'mf_sr':    mf_sr,
         '5wi':      int((wickets >= 5).sum()),
         '10wm':     int((g.groupby('p_match')['wickets'].sum() >= 10).sum())
                     if 'p_match' in g.columns else 0,
@@ -264,13 +239,11 @@ def show_summary_strip(df):
     for col, (label, val) in zip(cols, row1.items()):
         col.metric(label, val)
 
-    # Row 2: scaled diffs + match factors
+    # Row 2: scaled diffs
     row2 = {
         "Ave diff":  s['ave_diff'],
         "SR diff":   s['sr_diff'],
         "WPI diff":  s['wpi_diff'],
-        "MF Ave":    s['mf_ave'],
-        "MF SR":     s['mf_sr'],
     }
     st.caption("Scaled vs era/kind/country baseline — higher is better")
     cols2 = st.columns(len(row2))
@@ -297,8 +270,6 @@ def agg_stats_grouped(df: pd.DataFrame, group_col: str, group_label: str,
             'Ave diff':   s['ave_diff'],
             'SR diff':    s['sr_diff'],
             'WPI diff':   s['wpi_diff'],
-            'MF Ave':     s['mf_ave'],
-            'MF SR':      s['mf_sr'],
             '5WI':        s['5wi'],
             '10WM':       s['10wm'],
         })
