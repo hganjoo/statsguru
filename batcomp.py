@@ -172,7 +172,7 @@ with st.sidebar:
     result_options = ["Won", "Lost", "Draw / No result"]
     sel_result = st.multiselect("Match result", options=result_options)
 
-    min_runs = st.number_input("Minimum runs (per innings)", min_value=0, value=0, step=1)
+    min_runs = st.number_input("Minimum runs (to appear)", min_value=0, value=0, step=1)
     min_inns = st.number_input("Minimum innings (to appear)", min_value=1, value=10, step=1)
 
     st.markdown("---")
@@ -240,7 +240,8 @@ def build_comparison(df: pd.DataFrame, min_inns: int) -> pd.DataFrame:
 
         if inns < min_inns:
             continue
-
+        if runs < min_runs:
+            continue
         valid_balls = g[g['balls'].notna()]
         total_runs  = int(runs.sum())
         total_balls = int(valid_balls['balls'].sum())
