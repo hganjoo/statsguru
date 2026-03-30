@@ -239,7 +239,7 @@ def build_comparison(df: pd.DataFrame, min_inns: int) -> pd.DataFrame:
 
         if inns < min_inns:
             continue
-        if runs < min_runs.sum():
+        if runs.sum() < min_runs:
             continue
         valid_balls = g[g['balls'].notna()]
         total_runs  = int(runs.sum())
