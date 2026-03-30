@@ -124,6 +124,7 @@ with st.sidebar:
 
     min_inns = st.number_input("Minimum innings (to appear)", min_value=1, value=20, step=1)
     min_wkts = st.number_input("Minimum wickets (to appear)", min_value=0, value=50, step=1)
+    min_wpt = st.number_input("Minimum wickets per innings (to appear)",min_value=1,value=1.5)
 
     st.markdown("---")
     run_query = st.button("⚡ Run Comparison")
@@ -191,7 +192,7 @@ def build_comparison(df: pd.DataFrame, dismissed: pd.DataFrame,
         balls   = int(g['balls'].fillna(0).sum())
         wickets = int(g['wickets'].fillna(0).sum())
 
-        if inns < min_inns or wickets < min_wkts:
+        if inns < min_inns or wickets < min_wkts or (1.0*wickets/inns) < min_wpt :
             continue
 
         name    = g['bowl'].iloc[0]
