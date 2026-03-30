@@ -220,8 +220,7 @@ def apply_filters(df: pd.DataFrame) -> pd.DataFrame:
         if "Draw / No result" in sel_result:
             result_mask |= df['winner'].isna() | (df['winner'] == '')
         mask &= result_mask
-    if min_runs > 0:
-        mask &= df['runs'] >= min_runs
+    
 
     return df[mask].copy()
 
