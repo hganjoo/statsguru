@@ -124,7 +124,7 @@ with st.sidebar:
 
     min_inns = st.number_input("Minimum innings (to appear)", min_value=1, value=20, step=1)
     min_wkts = st.number_input("Minimum wickets (to appear)", min_value=0, value=50, step=1)
-    min_wpt = st.number_input("Minimum wickets per innings (to appear)",min_value=1.0,value=1.5)
+    min_wpt = st.number_input("Minimum wickets per Test (to appear)",min_value=1.0,value=1.5)
 
     st.markdown("---")
     run_query = st.button("⚡ Run Comparison")
@@ -191,8 +191,9 @@ def build_comparison(df: pd.DataFrame, dismissed: pd.DataFrame,
         runs    = int(g['runs_conceded'].fillna(0).sum())
         balls   = int(g['balls'].fillna(0).sum())
         wickets = int(g['wickets'].fillna(0).sum())
+        nmatches = int(g['p_match'].nunique())
 
-        if inns < min_inns or wickets < min_wkts or (1.0*wickets/inns) < min_wpt :
+        if inns < min_inns or wickets < min_wkts or (1.0*wickets/nmatches) < min_wpt :
             continue
 
         name    = g['bowl'].iloc[0]
@@ -202,6 +203,7 @@ def build_comparison(df: pd.DataFrame, dismissed: pd.DataFrame,
         sr   = safe(balls,   wickets)
         econ = round(runs / balls * 6, 2) if balls > 0 else float('nan')
         wpi  = safe(wickets, inns)
+        wpt = wickets/nmatches
 
         fwi = int((g['wickets'].fillna(0) >= 5).sum())
         twm = int((g.groupby('p_match')['wickets'].sum() >= 10).sum()) \
@@ -265,6 +267,7 @@ def build_comparison(df: pd.DataFrame, dismissed: pd.DataFrame,
             '10WM':     twm,
             'Top-7 %':  top7_pct,
             'Clean %':  clean_pct,
+            'WPT': wpt
         })
 
     if not rows:
