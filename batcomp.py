@@ -26,7 +26,7 @@ def pos_group(p):
 
 # ── Load & enrich (shared with sguru.py) ─────────────────────────────────────
 @st.cache_data
-def load_and_enrich(path: str, block_size: int = 6, k: float = 0.2) -> pd.DataFrame:
+def load_and_enrich(path: str, block_size: int = 8, k: float = 0.2) -> pd.DataFrame:
     df = pd.read_csv(path, low_memory=False)
 
     for col in ['year', 'runs', 'balls', 'strike_rate', 'batting_position', 'inns', 'is_out']:
@@ -70,11 +70,11 @@ def load_and_enrich(path: str, block_size: int = 6, k: float = 0.2) -> pd.DataFr
 
     # ── Baseline 2: ERA-COUNTRY ──
     era_ctry = (
-        top7.groupby(['era_block', 'country'])
+        top7.groupby(['era_block', 'country','team_bowl'])
         .apply(lambda g: g['runs'].sum() / g['is_out'].sum())
         .reset_index(name='base_era_country')
     )
-    df = df.merge(era_ctry, on=['era_block', 'country'], how='left')
+    df = df.merge(era_ctry, on=['era_block', 'country','team_bowl'], how='left')
     #df['adj_runs_era_country'] = z_adjust(df, 'base_era_country')
 
     # ── Baseline 3: ERA-POSITION ──
