@@ -47,7 +47,7 @@ def load_and_enrich(path: str, block_size: int = 6, k: float = 0.2) -> pd.DataFr
         return 'Home' if row['team_bat'] == home_country else 'Away'
     df['home_away'] = df.apply(get_home_away, axis=1)
 
-    top7 = df[df['batting_position'] <= 5]
+    top7 = df[df['batting_position'] <= 7]
 
     # ── Helper: compute z-score weights and adj_runs for any baseline ──
     def z_adjust(df_full, base_col):
@@ -75,7 +75,7 @@ def load_and_enrich(path: str, block_size: int = 6, k: float = 0.2) -> pd.DataFr
         .reset_index(name='base_era_country')
     )
     df = df.merge(era_ctry, on=['era_block', 'country'], how='left')
-    #df['adj_runs_era_country'] = z_adjust(df, 'base_era_country')
+    df['adj_runs_era_country'] = z_adjust(df, 'base_era_country')
 
     # ── Baseline 3: ERA-POSITION ──
     era_pos = (
@@ -256,11 +256,10 @@ def build_comparison(df: pd.DataFrame, min_inns: int) -> pd.DataFrame:
             'Runs':          total_runs,
             'HS':            int(runs.max()),
             'Avg':           safe_ave(total_runs, outs),
-            #'Era-ave':       safe_ave(g['adj_runs_era'].sum(),         outs),
-            #'Ctry-ave':      safe_ave(g['adj_runs_era_country'].sum(), outs),
-            #'Pos-ave':       safe_ave(g['adj_runs_era_pos'].sum(),     outs),
-            #'Opp-ave':       safe_ave(g['adj_runs_era_opp'].sum(),     outs),
-            'Ratio':            safe_ave(total_runs, outs) / g['base_era_country'].mean(),
+            'Era-ave':       safe_ave(g['adj_runs_era'].sum(),         outs),
+            'Ctry-ave':      safe_ave(g['adj_runs_era_country'].sum(), outs),
+            'Pos-ave':       safe_ave(g['adj_runs_era_pos'].sum(),     outs),
+            'Opp-ave':       safe_ave(g['adj_runs_era_opp'].sum(),     outs),
             'SR':            sr,
             'Team%':         round(g['team_runs_pct'].mean(), 1) if 'team_runs_pct' in g.columns else float('nan'),
             'Match factor':  round(g['match_factor'].mean(),  2) if 'match_factor'  in g.columns else float('nan'),

@@ -245,6 +245,7 @@ def agg_stats(df: pd.DataFrame, group_col: str, group_label: str, sort_by_label:
         is_out = g['is_out'].fillna(0).astype(int)
         outs   = int(is_out.sum())
         inns   = len(g)
+        
 
         ave, ave_era, ave_ctry, ave_pos, ave_opp = calc_aves(
             runs.sum(),
