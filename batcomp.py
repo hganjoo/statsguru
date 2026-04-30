@@ -131,16 +131,17 @@ with st.sidebar:
     st.markdown("### 🔍 Filters")
     st.caption("Filters apply to all innings used to compute each batter's stats.")
 
+    teams_all = sorted(df_raw['team_bat'].dropna().unique().tolist())
+    sel_teams = st.multiselect("Team",options=teams_all)
+
     opps_all = sorted(df_raw['team_bowl'].dropna().unique().tolist())
     sel_opps = st.multiselect("Opposition", options=opps_all)
+ 
+    countries_all = sorted(df_raw['country'].dropna().unique().tolist())
+    sel_countries = st.multiselect("Country", options=countries_all)
 
-    col1, col2 = st.columns(2)
-    with col1:
-        countries_all = sorted(df_raw['country'].dropna().unique().tolist())
-        sel_countries = st.multiselect("Country", options=countries_all)
-    with col2:
-        grounds_all = sorted(df_raw['ground'].dropna().unique().tolist())
-        sel_grounds = st.multiselect("Ground", options=grounds_all)
+    grounds_all = sorted(df_raw['ground'].dropna().unique().tolist())
+    sel_grounds = st.multiselect("Ground", options=grounds_all)
 
     yr_min = int(df_raw['year'].min())
     yr_max = int(df_raw['year'].max())
@@ -189,6 +190,8 @@ def apply_filters(df: pd.DataFrame) -> pd.DataFrame:
         mask &= df['country'].isin(sel_countries)
     if sel_grounds:
         mask &= df['ground'].isin(sel_grounds)
+    if sel_teams:
+        mask &= df['team_bat'].isin(sel_teams)
     if 'year' in df.columns:
         mask &= df['year'].between(sel_years[0], sel_years[1])
     if sel_inns:
