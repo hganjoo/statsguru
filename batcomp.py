@@ -28,6 +28,7 @@ def pos_group(p):
 @st.cache_data
 def load_and_enrich(path: str, block_size: int = 8, k: float = 0.2) -> pd.DataFrame:
     df = pd.read_csv(path, low_memory=False)
+    df.loc[df.bat=='Yousuf Youhana','bat'] = 'Mohammad Yousuf'
 
     for col in ['year', 'runs', 'balls', 'strike_rate', 'batting_position', 'inns', 'is_out']:
         if col in df.columns:
