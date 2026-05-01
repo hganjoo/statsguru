@@ -265,7 +265,7 @@ def build_comparison(df: pd.DataFrame, min_inns: int) -> pd.DataFrame:
             #'Pos-ave':       safe_ave(g['adj_runs_era_pos'].sum(),     outs),
             #'Opp-ave':       safe_ave(g['adj_runs_era_opp'].sum(),     outs),
             'Ratio':            safe_ave(total_runs, outs) / g['base_era_opp'].mean(),
-            'Baseline': g['base_era_opp'].mean()
+            'Baseline': g['base_era_opp'].mean(),
             'SR':            sr,
             'Team%':         round(g['team_runs_pct'].mean(), 1) if 'team_runs_pct' in g.columns else float('nan'),
             'Match factor':  round(g['match_factor'].mean(),  2) if 'match_factor'  in g.columns else float('nan'),
