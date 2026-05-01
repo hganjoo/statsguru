@@ -112,7 +112,7 @@ def load_and_enrich(path: str, block_size: int = 8, k: float = 0.2) -> pd.DataFr
 
     # ── Match factor ──
     # ── Match factor ──
-    top8 = df[df['batting_position'] <= 8][['p_match', 'runs', 'is_out']].copy()
+    top8 = df[df['batting_position'] < 12][['p_match', 'runs', 'is_out']].copy() # top8 runs is now all runs: May 1 2026
     match_agg = (
         top8.groupby('p_match')
         .agg(top8_runs=('runs', 'sum'), top8_outs=('is_out', 'sum'))
