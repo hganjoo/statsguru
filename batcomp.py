@@ -104,7 +104,7 @@ def load_and_enrich(path: str, block_size: int = 8, k: float = 0.2) -> pd.DataFr
         .reset_index(name='base_era_opp')
     )
     df = df.merge(era_opp, on=['era_block', 'team_bowl','home_away'], how='left')
-    df['adj_runs_era_opp'] = z_adjust(df, 'base_era_opp')
+    #df['adj_runs_era_opp'] = z_adjust(df, 'base_era_opp')
 
     # ── % of team runs ──
     if 'team_innings_runs' in df.columns:
