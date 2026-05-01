@@ -48,7 +48,7 @@ def load_and_enrich(path: str, block_size: int = 8, k: float = 0.2) -> pd.DataFr
         return 'Home' if row['team_bat'] == home_country else 'Away'
     df['home_away'] = df.apply(get_home_away, axis=1)
 
-    top7 = df[df['batting_position'] <= 5]
+    top7 = df[df['batting_position'] <= 12]
 
     # ── Helper: compute z-score weights and adj_runs for any baseline ──
     def z_adjust(df_full, base_col):
@@ -99,7 +99,7 @@ def load_and_enrich(path: str, block_size: int = 8, k: float = 0.2) -> pd.DataFr
 
     # ── Baseline 4: ERA-OPPOSITION ──
     era_opp = (
-        top7.groupby(['era_block', 'team_bowl'])
+        top7.groupby(['era_block', 'team_bowl','home_away'])
         .apply(lambda g: g['runs'].sum() / g['is_out'].sum())
         .reset_index(name='base_era_opp')
     )
