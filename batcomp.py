@@ -99,11 +99,11 @@ def load_and_enrich(path: str, block_size: int = 8, k: float = 0.2) -> pd.DataFr
 
     # ── Baseline 4: ERA-OPPOSITION ── # this is the ONE
     era_opp = (
-        top7.groupby(['era_block', 'team_bowl','home_away'])
+        top7.groupby(['era_block', 'team_bowl','home_away','country'])
         .apply(lambda g: g['runs'].sum() / g['is_out'].sum())
         .reset_index(name='base_era_opp')
     )
-    df = df.merge(era_opp, on=['era_block', 'team_bowl','home_away'], how='left')
+    df = df.merge(era_opp, on=['era_block', 'team_bowl','home_away','country'], how='left')
     #df['adj_runs_era_opp'] = z_adjust(df, 'base_era_opp')
 
     # ── % of team runs ──
