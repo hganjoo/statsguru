@@ -162,6 +162,7 @@ with st.sidebar:
         filter_captain = st.checkbox("As captain")
     with col6:
         filter_keeper = st.checkbox("As keeper")
+        filter_not_keeper = st.checkbox("Not as keeper")
     col7, col8 = st.columns(2)
     with col7:
         entry_runs_min = st.number_input("Entry runs (min)", min_value=0, value=0, step=1)
@@ -215,6 +216,8 @@ def apply_filters(df: pd.DataFrame) -> pd.DataFrame:
         mask &= df['player_role_type'].isin(['C', 'CWK'])
     elif filter_keeper:
         mask &= df['player_role_type'].isin(['WK', 'CWK'])
+    elif filter_not_keeper:
+        mask &= ~df['player_role_type'].str.contains('WK')
     if sel_result:
         result_mask = pd.Series([False] * len(df), index=df.index)
         if "Won" in sel_result:
