@@ -93,6 +93,9 @@ with st.sidebar:
     st.markdown("### 🔍 Filters")
     st.caption("Filters apply to all innings used to compute each bowler's stats.")
 
+    teams_all = sorted(df_raw['team_bowl'].dropna().unique().tolist())
+    sel_teams = st.multiselect("Team",options=teams_all)
+
     opps_all = sorted(df_raw['team_bat'].dropna().unique().tolist())
     sel_opps = st.multiselect("Opposition", options=opps_all)
 
@@ -134,6 +137,8 @@ def apply_filters(df: pd.DataFrame) -> pd.DataFrame:
     mask = pd.Series([True] * len(df), index=df.index)
     if sel_opps:
         mask &= df['team_bat'].isin(sel_opps)
+    if sel_teams:
+        mask &= df['team_bowl'].isin(sel_teams)
     if sel_countries:
         mask &= df['country'].isin(sel_countries)
     if sel_grounds:
